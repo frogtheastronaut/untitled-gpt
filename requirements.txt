@@ -2,4 +2,6 @@ torch
 pandas
 tqdm
 numpy
+
 kaggle
+kagglehub

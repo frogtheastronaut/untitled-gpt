@@ -38,6 +38,8 @@ def main():
     # Data params
     parser.add_argument('--data_files', type=str, nargs='+', required=True, help='List of dataset files (csv, tsv, txt)')
     parser.add_argument('--work_dir', type=str, default='out', help='Directory to save checkpoints')
+    parser.add_argument('--separator', type=str, default=None, help='Custom separator for plain text files')
+    parser.add_argument('--max_lines', type=int, default=None, help='Maximum number of lines/records to read')
     
     # Model params
     parser.add_argument('--n_layer', type=int, default=12, help='Number of layers')
@@ -68,13 +70,14 @@ def main():
 
     # Dataset
     print("Loading dataset...")
-    dataset = TextDataset(args.data_files, args.block_size)
+    dataset = TextDataset(args.data_files, args.block_size, separator=args.separator, max_lines=args.max_lines)
     print(f"Vocab size: {dataset.vocab_size}")
     
     # Save vocab
     save_vocab(dataset.tokenizer.chars, os.path.join(args.work_dir, 'vocab.json'))
     
-    dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
+    # IterableDataset cannot be shuffled by DataLoader
+    dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=False)
     
     # Config & Model
     config = GPTConfig(

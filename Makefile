@@ -1,4 +1,4 @@
-DATA_FILES = data/sample_text.txt
+DATA_FILES = data/TinyStories-train.txt
 WORK_DIR = out
 
 # 6M Parameters
@@ -7,6 +7,8 @@ train_6m:
 	python train.py \
 		--data_files $(DATA_FILES) \
 		--work_dir $(WORK_DIR)/6m \
+		--separator "<|endoftext|>" \
+		--max_lines 1000 \
 		--n_layer 6 \
 		--n_head 6 \
 		--n_embd 288 \
