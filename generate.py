@@ -11,10 +11,10 @@ from model import GPTModel
 from config import GPTConfig
 from dataset import TiktokenTokenizer
 
-def generate(model, context, length, temperature=1.0, top_k=None):
+def generate(model, context, max_length, temperature=1.0, top_k=None):
     model.eval()
-    for _ in range(length):
-        # crop context if needed
+    
+    for i in range(max_length):
         idx_cond = context[:, -model.config.n_ctx:]
         with torch.no_grad():
             logits, _ = model(idx_cond)
@@ -27,15 +27,20 @@ def generate(model, context, length, temperature=1.0, top_k=None):
             
         probs = torch.nn.functional.softmax(logits, dim=-1)
         idx_next = torch.multinomial(probs, num_samples=1)
-        context = torch.cat((context, idx_next), dim=1)
         
+        # Stop if it's the end token
+        if idx_next.item() == 50256:  # <|endoftext|>
+            break
+            
+        context = torch.cat((context, idx_next), dim=1)
+    
     return context
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--work_dir', type=str, required=True, help='Directory containing checkpoint')
     parser.add_argument('--prompt', type=str, default="Hello", help='Input prompt')
-    parser.add_argument('--length', type=int, default=100, help='Number of tokens to generate')
+    parser.add_argument('--length', type=int, default=100, help='Maximum number of tokens to generate')
     parser.add_argument('--temperature', type=float, default=1.0, help='Sampling temperature')
     parser.add_argument('--top_k', type=int, default=None, help='Top-k sampling')
     parser.add_argument('--seed', type=int, default=None, help='Random seed')
