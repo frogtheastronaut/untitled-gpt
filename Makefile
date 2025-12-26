@@ -17,19 +17,24 @@ train_6m:
 		--max_iters 5000 \
 		--resume
 
-# 20M Parameters
-# n_embd=420, n_layer=10, n_head=10
+# 20M model
 train_20m:
 	python train.py \
 		--data_files $(DATA_FILES) \
-		--work_dir $(WORK_DIR)/20m \
-		--n_layer 10 \
-		--n_head 10 \
-		--n_embd 420 \
+		--work_dir $(WORK_DIR)/25m \
+		--max_lines 80000 \
+		--n_layer 8 \
+		--n_head 8 \
+		--n_embd 384 \
 		--block_size 256 \
+		--dropout 0.1 \
 		--batch_size 16 \
-		--max_iters 10000 \
-		--resume
+		--learning_rate 6e-4 \
+		--weight_decay 0.01 \
+		--epochs 3 \
+		--save_every 500 \
+		--grad_clip 1.0 \
+		--val_ratio 0.1
 
 # 50M Parameters
 # n_embd=512, n_layer=16, n_head=8

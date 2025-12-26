@@ -13,7 +13,7 @@ class GPTConfig(object):
                  n_head=12,
                  layer_norm_epsilon=1e-5,
                  initializer_range=0.02,
-                 dropout=0.1):
+                 dropout=0.15):
         """Constructs GPTConfig.
 
         Args:

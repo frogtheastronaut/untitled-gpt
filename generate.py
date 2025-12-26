@@ -9,7 +9,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from model import GPTModel
 from config import GPTConfig
-from dataset import CharTokenizer
+from dataset import TiktokenTokenizer
 
 def generate(model, context, length, temperature=1.0, top_k=None):
     model.eval()
@@ -33,20 +33,19 @@ def generate(model, context, length, temperature=1.0, top_k=None):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--work_dir', type=str, required=True, help='Directory containing checkpoint and vocab.json')
+    parser.add_argument('--work_dir', type=str, required=True, help='Directory containing checkpoint')
     parser.add_argument('--prompt', type=str, default="Hello", help='Input prompt')
     parser.add_argument('--length', type=int, default=100, help='Number of tokens to generate')
     parser.add_argument('--temperature', type=float, default=1.0, help='Sampling temperature')
     parser.add_argument('--top_k', type=int, default=None, help='Top-k sampling')
-    parser.add_argument('--column_name', type=str, default='text', help='Name of the text column in the dataset')
-    
-    # Model architecture flags (must match training)
-    parser.add_argument('--n_layer', type=int, default=12)
-    parser.add_argument('--n_head', type=int, default=12)
-    parser.add_argument('--n_embd', type=int, default=768)
-    parser.add_argument('--block_size', type=int, default=128)
+    parser.add_argument('--seed', type=int, default=None, help='Random seed')
     
     args = parser.parse_args()
+    
+    if args.seed is not None:
+        torch.manual_seed(args.seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed(args.seed)
     
     # Device
     if torch.cuda.is_available():
@@ -57,31 +56,14 @@ def main():
         device = 'cpu'
     print(f"Using device: {device}")
 
-    # Load Vocab
-    vocab_path = os.path.join(args.work_dir, 'vocab.json')
-    if not os.path.exists(vocab_path):
-        print(f"Error: vocab.json not found in {args.work_dir}")
-        return
-        
-    with open(vocab_path, 'r') as f:
-        vocab_chars = json.load(f)
-    
-    tokenizer = CharTokenizer(vocab=vocab_chars)
-    print(f"Loaded vocab with {tokenizer.vocab_size} characters.")
+    # Load Tokenizer
+    tokenizer = TiktokenTokenizer()
+    print(f"Loaded tokenizer with {tokenizer.vocab_size} tokens.")
 
-    # Load Model
-    config = GPTConfig(
-        vocab_size=tokenizer.vocab_size,
-        n_positions=args.block_size,
-        n_ctx=args.block_size,
-        n_embd=args.n_embd,
-        n_layer=args.n_layer,
-        n_head=args.n_head
-    )
-    
-    model = GPTModel(config)
-    
+    # Locate Checkpoint
     ckpt_path = os.path.join(args.work_dir, 'final_model.pt')
+    if not os.path.exists(ckpt_path):
+        ckpt_path = os.path.join(args.work_dir, 'checkpoint_best.pt')
     if not os.path.exists(ckpt_path):
         ckpt_path = os.path.join(args.work_dir, 'checkpoint_last.pt')
     
@@ -89,9 +71,21 @@ def main():
         print(f"Error: No checkpoint found in {args.work_dir}")
         return
         
-    print(f"Loading model from {ckpt_path}")
-    checkpoint = torch.load(ckpt_path, map_location=device)
-    # Use strict=False to handle architecture changes (e.g. bias buffer removal)
+    print(f"Loading checkpoint from {ckpt_path}")
+    checkpoint = torch.load(ckpt_path, map_location=device, weights_only=False)
+    
+    # Load Config
+    if 'config' in checkpoint:
+        config = checkpoint['config']
+        print("Loaded configuration from checkpoint.")
+    else:
+        print("Error: Checkpoint does not contain configuration. Cannot reconstruct model.")
+        return
+
+    # Initialize Model
+    model = GPTModel(config)
+    
+    # Load State Dict
     model.load_state_dict(checkpoint['model_state_dict'], strict=False)
     model.to(device)
     

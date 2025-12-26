@@ -3,41 +3,35 @@ from torch.utils.data import IterableDataset
 import pandas as pd
 import os
 import argparse
+import tiktoken
 
-class CharTokenizer:
-    def __init__(self, data=None, vocab=None):
-        if vocab:
-            self.chars = vocab
-        elif data:
-            self.chars = sorted(list(set(data)))
-        else:
-            raise ValueError("Either data or vocab must be provided")
-            
-        self.vocab_size = len(self.chars)
-        self.stoi = { ch:i for i,ch in enumerate(self.chars) }
-        self.itos = { i:ch for i,ch in enumerate(self.chars) }
+class TiktokenTokenizer:
+    def __init__(self, model_name="gpt2"):
+        self.enc = tiktoken.get_encoding(model_name)
+        self.vocab_size = self.enc.n_vocab
+        # gpt2 encoding uses 50256 as <|endoftext|>
+        self.eot = self.enc.eot_token 
 
     def encode(self, s):
-        return [self.stoi[c] for c in s]
+        # allowed_special="all" allows <|endoftext|> to be encoded properly
+        return self.enc.encode(s, allowed_special="all")
 
     def decode(self, l):
-        return ''.join([self.itos[i] for i in l])
+        return self.enc.decode(l)
 
 class TextDataset(IterableDataset):
-    def __init__(self, file_paths, block_size, tokenizer=None, column_name='text', separator=None, max_lines=None):
+    def __init__(self, file_paths, block_size, tokenizer=None, column_name='text', separator=None, max_lines=None, split='train', val_ratio=0.1, seed=42):
         self.file_paths = file_paths
         self.block_size = block_size
         self.column_name = column_name
         self.separator = separator
         self.max_lines = max_lines
+        self.split = split
+        self.val_ratio = val_ratio
+        self.seed = seed
         
         if tokenizer is None:
-            # Build vocab by scanning data
-            chars = set()
-            print("Building vocabulary from data...")
-            for text in self._iterate_text():
-                chars.update(text)
-            self.tokenizer = CharTokenizer(vocab=sorted(list(chars)))
+            self.tokenizer = TiktokenTokenizer()
         else:
             self.tokenizer = tokenizer
             
@@ -45,6 +39,12 @@ class TextDataset(IterableDataset):
 
     def _iterate_text(self):
         lines_count = 0
+        # Simple deterministic hashing for split
+        # We use a counter to decide if a record belongs to train or val
+        # This assumes records are somewhat shuffled or independent
+        
+        total_processed = 0
+        
         for file_path in self.file_paths:
             if self.max_lines is not None and lines_count >= self.max_lines:
                 break
@@ -60,6 +60,15 @@ class TextDataset(IterableDataset):
                         texts = chunk.iloc[:, 0].astype(str).tolist()
                     
                     for text in texts:
+                        # Split logic
+                        is_val = (total_processed % 100) < (self.val_ratio * 100)
+                        total_processed += 1
+                        
+                        if self.split == 'train' and is_val:
+                            continue
+                        if self.split == 'val' and not is_val:
+                            continue
+                            
                         yield text
                         lines_count += 1
                         if self.max_lines is not None and lines_count >= self.max_lines:
@@ -71,6 +80,15 @@ class TextDataset(IterableDataset):
                 if sep == '\n':
                     with open(file_path, 'r', encoding='utf-8') as f:
                         for line in f:
+                            # Split logic
+                            is_val = (total_processed % 100) < (self.val_ratio * 100)
+                            total_processed += 1
+                            
+                            if self.split == 'train' and is_val:
+                                continue
+                            if self.split == 'val' and not is_val:
+                                continue
+
                             yield line
                             lines_count += 1
                             if self.max_lines is not None and lines_count >= self.max_lines:
@@ -83,14 +101,26 @@ class TextDataset(IterableDataset):
                             chunk = f.read(4096)
                             if not chunk:
                                 if buffer:
-                                    yield buffer
-                                    lines_count += 1
+                                    # Split logic
+                                    is_val = (total_processed % 100) < (self.val_ratio * 100)
+                                    total_processed += 1
+                                    
+                                    if (self.split == 'train' and not is_val) or (self.split == 'val' and is_val):
+                                        yield buffer
+                                        lines_count += 1
                                 break
                             buffer += chunk
                             while sep in buffer:
                                 part, buffer = buffer.split(sep, 1)
-                                yield part
-                                lines_count += 1
+                                
+                                # Split logic
+                                is_val = (total_processed % 100) < (self.val_ratio * 100)
+                                total_processed += 1
+                                
+                                if (self.split == 'train' and not is_val) or (self.split == 'val' and is_val):
+                                    yield part
+                                    lines_count += 1
+                                    
                                 if self.max_lines is not None and lines_count >= self.max_lines:
                                     return
 
