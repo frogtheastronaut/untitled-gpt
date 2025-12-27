@@ -120,9 +120,9 @@ dmypy.json
 .DS_Store
 */.DS_Store
 
-# this file is used for testing the model
-# @TODO: do not have a script used for testing, very unprofessional
-speak.sh
+# files used to test/train the model
+scripts/
+
 # ignore dataset files
 data
 data/
